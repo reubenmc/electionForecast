@@ -6,6 +6,7 @@ if(length(NewPackages)>0) {install.packages(NewPackages,repos="http://cran.rstud
 library(MCMCpack)
 library(dplyr)
 library(magrittr)
+set.seed(2323)
 
 # data #
 ev = read.csv("/Users/Reubenm/Documents/surveyMonkey/data/Election2016_Electoral_Votes.csv")
@@ -33,7 +34,11 @@ voteModel = function(priorParam, votes, nsims) {
   # posterior parameters # 
   post_alpha = prior_alpha + unlist(votes)
   res = rdirichlet(nsims, post_alpha)
-  return(res)
+  # 95% CI #
+  ci = apply(res, 2, quantile, probs = c(0.025, 0.975))
+  # remove obs not in CI #
+  res = res[res[,1] >= ci[1,1] & res[,1] <= ci[2,1],]
+  return(list(res, ci))
 }
 
 # find prior based as mean of estimates #
@@ -47,24 +52,38 @@ priorData = firstWeeks %>%
 
 # for each state calculate posterior estimates #
 # find how many times Hilary wins each state   #
-nSims = 1e4
-win = as.data.frame(matrix(NA, nrow = 51, ncol = nSims))
+nSims = 10000
+winHil = as.data.frame(matrix(NA, nrow = 51, ncol = nSims))
+winTrump = as.data.frame(matrix(NA, nrow = 51, ncol = nSims))
+ciHil = as.data.frame(matrix(NA, nrow = 51, ncol = 2))
+ciTrump = as.data.frame(matrix(NA, nrow = 51, ncol = 2))
+
 for (i in 1:nrow(lastWeek)) {
+  # find prior from previous data #
   prior = priorData[i, 2:7]
-  res = voteModel(prior, voteCounts[i,], nSims)
-  win[i,] = apply(res, 1, function(x) ifelse(which.max(x) == 1, 1, 0))
+  res = voteModel(prior, voteCounts[i,], 10528)
+  winHil[i,] = apply(res[[1]], 1, function(x) ifelse(which.max(x) == 1, 1, 0))
+  winTrump[i,] = apply(res[[1]], 1, function(x) ifelse(which.max(x) == 2, 1, 0))
+  ciHil[i,] = res[[2]][,1]
+  ciTrump[i,] = res[[2]][,2]
 }
 # find total votes for each simulation #
-votes = win * as.matrix(ev[,2])
+votes = winHil * as.matrix(ev[,2])
 votesTot = apply(votes, 2, sum)
 # find out how many sims result in winning election #
 pWin = sum(votesTot >= 270)/nSims
+pWin
 
-
-
-# for quantiles #
-#res = apply(rdirichlet(nsims, post_alpha), 2, quantile, probs = c(0.025, 0.975))
-
+# examine CIs #
+CIs = cbind(ciHil, ciTrump)
+rownames(CIs) = ev$state
+overCIs = CIs[c('Arizona', 'Colorado', 'Delaware', 
+                'Florida', 'Georgia', 'Maine', 'Michigan', 
+                'Mississippi', 'Nevada', 'New Hampshire', 
+                'New Mexico', 'Pennsylvania', 'South Carolina', 
+                'Wisconsin'),]
+# see how many EVs these represent #
+sum(ev$ev[ev$state %in% rownames(overCIs)])
 ####################################################################################
 
 # find which states Hilary is most likely to win #
