@@ -6,7 +6,8 @@ if(length(NewPackages)>0) {install.packages(NewPackages,repos="http://cran.rstud
 library(MCMCpack)
 library(dplyr)
 library(magrittr)
-set.seed(2323)
+library(ggplot2)
+set.seed(3)
 
 # data #
 ev = read.csv("/Users/Reubenm/Documents/surveyMonkey/data/Election2016_Electoral_Votes.csv")
@@ -84,59 +85,40 @@ overCIs = CIs[c('Arizona', 'Colorado', 'Delaware',
                 'Wisconsin'),]
 # see how many EVs these represent #
 sum(ev$ev[ev$state %in% rownames(overCIs)])
+
 ####################################################################################
 
-# find which states Hilary is most likely to win #
-
-
-
-# for each state find conditional probability of  #
-# clinton winning given that she won the election #
-resClinton = win
-rownames(resClinton) = ev[,1]
-
+# find which states Hilary is most likely to win when she wins election #
 # P(win state x | Hillary wins election) #
-winHill = resClinton[,which(votesTot >= 270)]
-winState = apply(winHill, 1, sum)/nSims
+rownames(winHil) = ev[,1]
+# only inculde winning sims #
+loseHil = winHil[,which(votesTot < 270)]
+loseHil = apply(loseHil, 1, sum)/nSims
+winHil = winHil[,which(votesTot >= 270)]
+winHil = as.data.frame(apply(winHil, 1, sum))
+winHil$probability = winHil$`apply(winHil, 1, sum)`/nSims
+colnames(winHil) = c('Number of wins', 'Probability')
 
-# P(win state x | Hillary doesn't win election) #
-loseHill = resClinton[,which(votesTot < 270)]
-loseState = apply(loseHill, 1, sum)/nSims
 
-# calculate full Bayes rule #
-condProb = (winState*pWin) / ((winState*pWin) + (loseState*(1-pWin)))
+winHil$probability2 = winHil$`Number of wins`/max(winHil$`Number of wins`)
 
-############################
-######## Trump ############
-############################
-
-# for each state calculate posterior estimates #
-# find how many times Trump wins each state   #
-nSims = 1e4
-win = as.data.frame(matrix(NA, nrow = 51, ncol = nSims))
-for (i in 1:nrow(lastWeek)) {
-  prior = priorData[i, 2:7]
-  res = voteModel(prior, voteCounts[i,], nSims)
-  win[i,] = apply(res, 1, function(x) ifelse(which.max(x) == 2, 1, 0))
-}
-# find total votes for each simulation #
-votes = win * as.matrix(ev[,2])
-votesTot = apply(votes, 2, sum)
-# find out how many sims result in winning election #
-pWin = sum(votesTot >= 270)/nSims
-
-# for each state find conditional probability of  #
-# clinton winning given that she won the election #
-resTrump = win
-rownames(resTrump) = ev[,1]
-
+# find which states Trump is most likely to win when he wins election #
 # P(win state x | Trump wins election) #
-winTrump = resTrump[,which(votesTot >= 270)]
-winState = apply(winTrump, 1, sum)/nSims
+rownames(winTrump) = ev[,1]
+# only inculde winning sims #
+loseTrump = winTrump[,which(votesTot >= 270)]
+loseTrump = apply(loseTrump, 1, sum)/nSims
+winTrump = winTrump[,which(votesTot < 270)]
+winTrump = as.data.frame(apply(winTrump, 1, sum))
+winTrump$probability = winTrump$`apply(winTrump, 1, sum)`/nSims
+colnames(winTrump) = c('Number of wins', 'Probability')
 
-# P(win state x | Trump doesn't win election) #
-loseHill = resTrump[,which(votesTot < 270)]
-loseState = apply(loseHill, 1, sum)/nSims
+winTrump$probability2 = winTrump$`Number of wins`/max(winTrump$`Number of wins`)
 
-# calculate full Bayes rule #
-condProb = (winState*pWin) / ((winState*pWin) + (loseState*(1-pWin)))
+
+# calculate full Bayes rule for Hilary #
+condProb = (winHil$probability2*pWin) / ((winHil$probability2*pWin) + (loseHil*(1-pWin)))
+
+# calculate full Bayes rule for Trump #
+condProb = (winTrump$probability2*(1-pWin)) / ((winHil$probability2*(1-pWin)) + (loseTrump*(pWin)))
+ 
